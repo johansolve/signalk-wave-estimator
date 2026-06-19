@@ -24,7 +24,8 @@
     "LICENSE"
   ],
   "signalk": {
-    "displayName": "Wave estimator"
+    "displayName": "Wave estimator",
+    "appIcon": "icon.svg"
   },
   "engines": {
     "node": ">=18"

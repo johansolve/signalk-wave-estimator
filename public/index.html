@@ -5,16 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b1622">
   <title>Wave estimator</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
-    <h1>Wave estimator</h1>
-    <span id="link" class="link" title="connection">●</span>
+    <div class="brand">
+      <img class="brand-icon" src="icon.svg" alt="">
+      <h1>Wave estimator</h1>
+    </div>
+    <div class="topbar-actions">
+      <span id="link" class="link" title="connection">●</span>
+      <a class="close" href="/admin/#/webapps" title="Back to webapps" aria-label="Back to webapps">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18"/></svg>
+      </a>
+    </div>
   </header>
 
   <div id="banner" class="banner unknown">
-    <span class="banner-label">Confidence</span>
+    <span id="bannerLabel" class="banner-label">Confidence</span>
     <span id="confValue" class="banner-value">–</span>
     <span id="bannerNote" class="banner-note">waiting for data…</span>
   </div>

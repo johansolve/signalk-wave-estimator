@@ -211,15 +211,31 @@ module.exports = function (app) {
       return
     }
 
+    // A heartbeat (state + rmsSlope + gate) is published every cycle the
+    // analysis succeeds, even when gated, so the webapp can tell "too calm" and
+    // "low confidence" apart from "no data / plugin off" (no heartbeat at all).
     const rmsSlopeDeg = r.rmsSlope * 180 / Math.PI
+    const slopeGate = opts.minSlopeDeg * Math.PI / 180
+
     if (rmsSlopeDeg < opts.minSlopeDeg) {
+      emit([
+        { path: 'environment.wave.state', value: 'calm' },
+        { path: 'environment.wave.rmsSlope', value: r.rmsSlope },
+        { path: 'environment.wave.slopeGate', value: slopeGate }
+      ])
       app.setPluginStatus(
-        `Too calm — ${rmsSlopeDeg.toFixed(2)}° RMS slope < ${opts.minSlopeDeg}° gate. Not publishing.`
+        `Too calm — ${rmsSlopeDeg.toFixed(2)}° RMS slope < ${opts.minSlopeDeg}° gate. Not publishing waves.`
       )
       return
     }
 
     if (r.confidence < opts.minConfidence) {
+      emit([
+        { path: 'environment.wave.state', value: 'lowConfidence' },
+        { path: 'environment.wave.rmsSlope', value: r.rmsSlope },
+        { path: 'environment.wave.slopeGate', value: slopeGate },
+        { path: 'environment.wave.confidence', value: r.confidence }
+      ])
       app.setPluginStatus(
         `Low confidence (${r.confidence.toFixed(2)}) — not publishing. ` +
         `T≈${r.period.toFixed(1)}s λ≈${r.length.toFixed(0)}m`
@@ -227,7 +243,7 @@ module.exports = function (app) {
       return
     }
 
-    publish(r)
+    publish(r, slopeGate)
     app.setPluginStatus(
       `T ${r.period.toFixed(1)}s · λ ${r.length.toFixed(0)}m · ` +
       `Hs≈${r.significantHeight != null ? r.significantHeight.toFixed(2) : '?'}m · ` +
@@ -235,8 +251,23 @@ module.exports = function (app) {
     )
   }
 
-  function publish (r) {
+  function emit (values) {
+    app.handleMessage(plugin.id, {
+      updates: [
+        {
+          source: { label: plugin.id },
+          timestamp: new Date().toISOString(),
+          values
+        }
+      ]
+    })
+  }
+
+  function publish (r, slopeGate) {
     const values = [
+      { path: 'environment.wave.state', value: 'ok' },
+      { path: 'environment.wave.rmsSlope', value: r.rmsSlope },
+      { path: 'environment.wave.slopeGate', value: slopeGate },
       { path: 'environment.wave.period', value: r.period },
       { path: 'environment.wave.encounterPeriod', value: r.encounterPeriod },
       { path: 'environment.wave.length', value: r.length },
@@ -252,15 +283,7 @@ module.exports = function (app) {
     }
     values.push({ path: 'environment.wave.directionRelative', value: r.directionRelative })
 
-    app.handleMessage(plugin.id, {
-      updates: [
-        {
-          source: { label: plugin.id },
-          timestamp: new Date().toISOString(),
-          values
-        }
-      ]
-    })
+    emit(values)
   }
 
   function publishMeta () {
@@ -273,7 +296,10 @@ module.exports = function (app) {
       { path: 'environment.wave.significantHeight', value: { units: 'm', displayName: 'Sig. wave height (proxy)', shortName: 'Hs~', description: 'Slope-inversion proxy from pitch/roll — no heave sensor; trust only with high confidence' } },
       { path: 'environment.wave.directionTrue', value: { units: 'rad', displayName: 'Wave direction (from)', shortName: 'Dir' } },
       { path: 'environment.wave.directionRelative', value: { units: 'rad', displayName: 'Wave dir. rel. bow (from)', shortName: 'DirRel', description: 'Magnitude off the bow axis; port/starboard side is unresolved' } },
-      { path: 'environment.wave.confidence', value: { units: 'ratio', displayName: 'Estimate confidence', shortName: 'conf' } }
+      { path: 'environment.wave.confidence', value: { units: 'ratio', displayName: 'Estimate confidence', shortName: 'conf' } },
+      { path: 'environment.wave.state', value: { displayName: 'Estimator state', description: 'ok | calm (below the motion gate) | lowConfidence' } },
+      { path: 'environment.wave.rmsSlope', value: { units: 'rad', displayName: 'RMS pitch/roll slope', shortName: 'slope', description: 'Raw wave-band motion energy; the amplitude gate acts on this' } },
+      { path: 'environment.wave.slopeGate', value: { units: 'rad', displayName: 'Motion gate threshold', shortName: 'gate' } }
     ]
     app.handleMessage(plugin.id, { updates: [{ meta }] })
   }

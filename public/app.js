@@ -18,11 +18,14 @@
     'environment.wave.significantHeight',
     'environment.wave.directionTrue',
     'environment.wave.directionRelative',
-    'environment.wave.confidence'
+    'environment.wave.confidence',
+    'environment.wave.state',
+    'environment.wave.rmsSlope',
+    'environment.wave.slopeGate'
   ]
 
   var el = {}
-  ;['link', 'banner', 'confValue', 'bannerNote', 'height', 'heightSub', 'period',
+  ;['link', 'banner', 'bannerLabel', 'confValue', 'bannerNote', 'height', 'heightSub', 'period',
     'encPeriod', 'length', 'celerity', 'groupSpeed', 'dirTrue', 'dirRel',
     'waveArrow', 'age', 'regime'].forEach(function (id) { el[id] = document.getElementById(id) })
 
@@ -34,33 +37,62 @@
   }
 
   function render () {
-    el.height.textContent = fmt(state['environment.wave.significantHeight'], 2)
-    el.period.textContent = fmt(state['environment.wave.period'], 1)
-    el.encPeriod.textContent = fmt(state['environment.wave.encounterPeriod'], 1)
-    el.length.textContent = fmt(state['environment.wave.length'], 0)
+    // Wave parameters are only meaningful when not gated; blank them when calm.
+    var calm = state['environment.wave.state'] === 'calm'
 
-    var c = state['environment.wave.celerity']
-    var g = state['environment.wave.groupSpeed']
+    el.height.textContent = fmt(calm ? null : state['environment.wave.significantHeight'], 2)
+    el.period.textContent = fmt(calm ? null : state['environment.wave.period'], 1)
+    el.encPeriod.textContent = fmt(calm ? null : state['environment.wave.encounterPeriod'], 1)
+    el.length.textContent = fmt(calm ? null : state['environment.wave.length'], 0)
+
+    var c = calm ? null : state['environment.wave.celerity']
+    var g = calm ? null : state['environment.wave.groupSpeed']
     el.celerity.textContent = (c == null) ? '–' : fmt(c * MS_TO_KN, 1)
     el.groupSpeed.textContent = (g == null) ? '–' : fmt(g * MS_TO_KN, 1)
 
-    var dt = state['environment.wave.directionTrue']
-    var dr = state['environment.wave.directionRelative']
+    var dt = calm ? null : state['environment.wave.directionTrue']
+    var dr = calm ? null : state['environment.wave.directionRelative']
     el.dirTrue.textContent = (dt == null) ? '–' : Math.round(dt * RAD_TO_DEG)
     el.dirRel.textContent = (dr == null) ? '–' : Math.round(dr * RAD_TO_DEG)
     if (dr != null) {
       // Arrow points to where the waves come FROM, relative to the bow (up).
       el.waveArrow.setAttribute('transform', 'rotate(' + (dr * RAD_TO_DEG) + ' 60 60)')
     }
+    el.heightSub.textContent = calm ? 'too calm — below the motion gate' : 'slope inversion · no heave sensor'
 
+    setBanner()
+  }
+
+  function setBanner () {
+    var st = state['environment.wave.state']
+    var rms = state['environment.wave.rmsSlope']
+    var gate = state['environment.wave.slopeGate']
     var conf = state['environment.wave.confidence']
-    el.confValue.textContent = (conf == null) ? '–' : Math.round(conf * 100) + '%'
+
     var cls = 'unknown'
+    var label = 'Confidence'
+    var value = '–'
     var note = 'waiting for data…'
-    if (conf != null) {
+
+    if (st === 'calm') {
+      cls = 'calm'
+      label = 'Motion'
+      value = (rms == null) ? '–' : (rms * RAD_TO_DEG).toFixed(2) + '°'
+      note = 'Too calm — RMS slope below the ' +
+        (gate == null ? '' : (gate * RAD_TO_DEG).toFixed(1) + '° ') +
+        'gate. No waves to measure.'
+    } else if (st === 'lowConfidence') {
+      cls = 'bad'
+      value = (conf == null) ? '–' : Math.round(conf * 100) + '%'
+      note = 'Low — short / confused / beam seas. Waves not published.'
+    } else if (conf != null) {
+      value = Math.round(conf * 100) + '%'
       if (conf >= 0.6) { cls = 'good'; note = 'Estimate is reliable.' } else if (conf >= 0.3) { cls = 'warn'; note = 'Marginal — treat height with care.' } else { cls = 'bad'; note = 'Low — height unreliable (short/confused/beam seas).' }
     }
+
     el.banner.className = 'banner ' + cls
+    el.bannerLabel.textContent = label
+    el.confValue.textContent = value
     el.bannerNote.textContent = note
   }
 
