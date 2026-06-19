@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1622">
+  <title>Wave estimator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Wave estimator</h1>
+    <span id="link" class="link" title="connection">●</span>
+  </header>
+
+  <div id="banner" class="banner unknown">
+    <span class="banner-label">Confidence</span>
+    <span id="confValue" class="banner-value">–</span>
+    <span id="bannerNote" class="banner-note">waiting for data…</span>
+  </div>
+
+  <main class="grid">
+    <section class="card hero">
+      <div class="card-label">Sig. wave height <span class="proxy">proxy</span></div>
+      <div class="card-value"><span id="height">–</span><span class="unit">m</span></div>
+      <div class="card-sub" id="heightSub">slope inversion · no heave sensor</div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Wave period</div>
+      <div class="card-value"><span id="period">–</span><span class="unit">s</span></div>
+      <div class="card-sub">encounter <span id="encPeriod">–</span> s</div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Wavelength</div>
+      <div class="card-value"><span id="length">–</span><span class="unit">m</span></div>
+      <div class="card-sub" id="lengthSub">&nbsp;</div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Celerity</div>
+      <div class="card-value"><span id="celerity">–</span><span class="unit">kn</span></div>
+      <div class="card-sub">group <span id="groupSpeed">–</span> kn</div>
+    </section>
+
+    <section class="card compass-card">
+      <div class="card-label">Wave direction <span class="proxy">from</span></div>
+      <svg id="compass" class="compass" viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="compass-ring" cx="60" cy="60" r="54"></circle>
+        <polygon class="compass-boat" points="60,18 70,86 60,76 50,86"></polygon>
+        <g id="waveArrow" class="wave-arrow" transform="rotate(0 60 60)">
+          <line x1="60" y1="60" x2="60" y2="14"></line>
+          <polygon points="60,8 55,20 65,20"></polygon>
+        </g>
+      </svg>
+      <div class="card-sub">
+        <span id="dirTrue">–</span>° true ·
+        <span id="dirRel">–</span>° off bow
+        <span class="proxy">±side</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Status</div>
+      <div class="card-value small"><span id="age">–</span></div>
+      <div class="card-sub" id="regime">&nbsp;</div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    Height is a slope-derived proxy — trust it only at high confidence.
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

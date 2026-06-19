@@ -8,6 +8,7 @@
   },
   "keywords": [
     "signalk-node-server-plugin",
+    "signalk-webapp",
     "signalk-category-utility",
     "wave",
     "sea-state",
@@ -18,9 +19,13 @@
   "files": [
     "index.js",
     "lib/",
+    "public/",
     "README.md",
     "LICENSE"
   ],
+  "signalk": {
+    "displayName": "Wave estimator"
+  },
   "engines": {
     "node": ">=18"
   },
