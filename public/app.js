@@ -36,6 +36,10 @@
     return (v === undefined || v === null || !isFinite(v)) ? '–' : v.toFixed(digits)
   }
 
+  function deg360 (d) {
+    return ((Math.round(d) % 360) + 360) % 360
+  }
+
   function render () {
     // Wave parameters are only meaningful when not gated; blank them when calm.
     var calm = state['environment.wave.state'] === 'calm'
@@ -52,9 +56,9 @@
 
     var dt = calm ? null : state['environment.wave.directionTrue']
     var dr = calm ? null : state['environment.wave.directionRelative']
-    el.dirTrue.textContent = (dt == null) ? '–' : Math.round(dt * RAD_TO_DEG)
-    el.dirRel.textContent = (dr == null) ? '–' : Math.round(dr * RAD_TO_DEG)
-    if (dr != null) {
+    el.dirTrue.textContent = (dt == null || !isFinite(dt)) ? '–' : deg360(dt * RAD_TO_DEG)
+    el.dirRel.textContent = (dr == null || !isFinite(dr)) ? '–' : Math.round(dr * RAD_TO_DEG)
+    if (dr != null && isFinite(dr)) {
       // Arrow points to where the waves come FROM, relative to the bow (up).
       el.waveArrow.setAttribute('transform', 'rotate(' + (dr * RAD_TO_DEG) + ' 60 60)')
     }
@@ -84,7 +88,7 @@
     } else if (st === 'lowConfidence') {
       cls = 'bad'
       value = (conf == null) ? '–' : Math.round(conf * 100) + '%'
-      note = 'Low — short / confused / beam seas. Waves not published.'
+      note = 'Low — unreliable conditions (short / confused / beam / fast following sea). Waves not published.'
     } else if (conf != null) {
       value = Math.round(conf * 100) + '%'
       if (conf >= 0.6) { cls = 'good'; note = 'Estimate is reliable.' } else if (conf >= 0.3) { cls = 'warn'; note = 'Marginal — treat height with care.' } else { cls = 'bad'; note = 'Low — height unreliable (short/confused/beam seas).' }

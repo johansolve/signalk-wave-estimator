@@ -6,10 +6,13 @@ Derive sea state from boat motion. The plugin watches `navigation.attitude`
 using the deep-water encounter relation, and publishes true wave period,
 wavelength, celerity and a **height proxy** under `environment.wave.*`.
 
-> **Alpha.** Period / wavelength / celerity are well-posed. Wave **height is a
-> proxy**, not a measurement — there is no heave/vertical-acceleration sensor on
-> the bus, so height is inferred from wave *slope* and carries a confidence
-> value. Trust it only when confidence is high. See *Height* below.
+> **Alpha — not yet sea-trialled.** All verification so far is synthetic (the
+> `npm test` sanity check) plus dockside running; the estimator has **not** been
+> validated against real waves or a known sea state, and the height proxy is
+> **uncalibrated**. Period / wavelength / celerity are well-posed. Wave **height
+> is a proxy**, not a measurement — there is no heave/vertical-acceleration
+> sensor on the bus, so height is inferred from wave *slope* and carries a
+> confidence value. Trust it only when confidence is high. See *Height* below.
 
 ## Why height is only a proxy
 
@@ -47,6 +50,38 @@ The published `environment.wave.confidence` (0–1) folds in wavelength-vs-hull,
 spectral sharpness, encounter-solve validity and roll dominance. Estimates below
 **Minimum confidence** are suppressed rather than published as noise.
 
+## Path to a measured height (future: heave sensor)
+
+The proxy exists only because nothing on the bus reports vertical motion: the
+Raymarine EV-1 puts attitude (PGN 127257) on N2K but **not** heave (PGN 127252),
+and there is no MRU aboard. A measured significant height needs a source of
+**vertical acceleration in the earth frame** — published as `environment.heave`
+(m, an `environment` path, not `navigation.attitude`), or as raw vertical
+acceleration the plugin integrates itself.
+
+The practical candidate is a low-cost 9-DoF IMU with on-chip fusion, e.g. a
+**BNO085** (the BNO055 is legacy). Notes for an on-board fit:
+
+- **Interface — UART, not I²C.** Both Bosch BNO0xx parts use I²C clock
+  stretching, which the Raspberry Pi's hardware I²C cannot handle reliably (you
+  get dropped/corrupt reads). Use a Pi UART, or a small ESP32 + SensESP node that
+  publishes deltas over Wi-Fi/N2K.
+- **Mounting — placement matters, orientation does not.** Mount it near the
+  vessel's centre of motion (low, central) so rotation-induced acceleration
+  (`r × ω̇` + centripetal) does not leak into heave. Orientation is *free* for
+  heave alone: the fusion tracks "down" itself, so the vertical component is
+  recovered however the chip is turned — it only has to be rigidly fixed. No
+  magnetometer calibration is needed (gravity + gyro suffice; the magnetometer
+  only fixes heading), which sidesteps the usual hard/soft-iron grief on board.
+- **Plugin side — integrate in the frequency domain.** Rather than time-domain
+  double integration (which drifts), take the acceleration PSD and **divide by
+  (2πf)⁴** to get the elevation spectrum. The existing band limit
+  (`fMin = 1/periodMax`) discards the low-frequency bins where integration would
+  otherwise blow up. Height then becomes a true `Hs = 4·√(m0_heave)` — no `k`
+  inversion, no narrowband assumption, no λ-vs-hull validity gate.
+
+Until that hardware exists, the slope inversion below is the best available.
+
 ## Physics
 
 Deep-water encounter relation, solved for the true angular frequency `ω`:
@@ -59,9 +94,13 @@ T = 2π/ω,  λ = g·T²/2π ≈ 1.56·T²,  c = g·T/2π,  c_g = c/2
 ```
 
 Head seas (`cos μ < 0`) raise the encounter frequency (waves met more often);
-following seas lower it and can be multi-valued — when the boat outruns the wave
-energy there is no real root and the plugin falls back to the uncorrected period
-with reduced confidence.
+following seas lower it and can be multi-valued. As the encounter frequency
+approaches its maximum the two roots converge and the solve becomes
+ill-conditioned (and beyond the maximum there is no real root at all). In both
+cases the corrected period would be systematically wrong rather than merely
+uncertain, so the plugin **withholds** the wave parameters for that cycle
+(publishing only the heartbeat with `state: lowConfidence`) instead of emitting a
+confident-looking but arbitrary value.
 
 The encounter angle magnitude off the bow is estimated from the slope-energy
 ratio `tan α = √(m0_roll / m0_pitch)`. Amplitude alone cannot resolve
@@ -116,9 +155,13 @@ the encounter-speed correction.
 
 ## Known limitations / TODO
 
-- Height is a slope-inversion proxy (no heave sensor); calibrate against a
+- **Not yet sea-trialled.** No on-water validation against a known sea state;
+  the height proxy is uncalibrated. This is the next step — calibrate against a
   sea-trial visual reference.
-- Following-seas root ambiguity handled only by fallback, not full resolution.
+- Height is a slope-inversion proxy (no heave sensor) — see *Path to a measured
+  height* for what a real one would take.
+- Following-seas root ambiguity / ill-conditioning near the encounter-frequency
+  maximum is handled by withholding the estimate, not by full resolution.
 - `directionRelative` port/starboard side unresolved (needs roll/pitch phase).
 - Narrowband height inversion biases broadband/confused seas.
 - Optional shallow-water dispersion correction (`environment.depth`) not yet

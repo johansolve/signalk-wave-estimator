@@ -6,8 +6,25 @@ module.exports = function (app) {
   let timer = null
   let unsubscribes = []
   let buffer = [] // time-sorted [{ t, pitch, roll }]
-  let latest = { stw: null, headingTrue: null, headingMagnetic: null, windDir: null }
+  // Each scalar input keeps its arrival time so compute() can ignore a source
+  // that has gone silent instead of trusting a stale value forever.
+  let latest = emptyLatest()
   let opts = {}
+
+  const STALE_MS = 20000
+
+  function emptyLatest () {
+    return {
+      stw: { value: null, t: 0 },
+      headingTrue: { value: null, t: 0 },
+      headingMagnetic: { value: null, t: 0 },
+      windDir: { value: null, t: 0 }
+    }
+  }
+
+  function fresh (f) {
+    return (f.value != null && (Date.now() - f.t) < STALE_MS) ? f.value : null
+  }
 
   const plugin = {
     id: 'signalk-wave-estimator',
@@ -106,7 +123,7 @@ module.exports = function (app) {
       settings || {}
     )
     buffer = []
-    latest = { stw: null, headingTrue: null, headingMagnetic: null, windDir: null }
+    latest = emptyLatest()
 
     subscribe()
     publishMeta()
@@ -144,9 +161,12 @@ module.exports = function (app) {
 
   function onDelta (delta) {
     if (!delta.updates) { return }
+    const now = Date.now()
     for (const u of delta.updates) {
       if (!u.values) { continue }
-      const t = u.timestamp ? Date.parse(u.timestamp) : Date.now()
+      // Buffer samples carry the delta's own (signal) time; the scalar inputs are
+      // stamped with arrival time, which is the right reference for staleness.
+      const t = u.timestamp ? Date.parse(u.timestamp) : now
       for (const v of u.values) {
         switch (v.path) {
           case 'navigation.attitude':
@@ -155,16 +175,16 @@ module.exports = function (app) {
             }
             break
           case 'navigation.speedThroughWater':
-            if (Number.isFinite(v.value)) { latest.stw = v.value }
+            if (Number.isFinite(v.value)) { latest.stw = { value: v.value, t: now } }
             break
           case 'navigation.headingTrue':
-            if (Number.isFinite(v.value)) { latest.headingTrue = v.value }
+            if (Number.isFinite(v.value)) { latest.headingTrue = { value: v.value, t: now } }
             break
           case 'navigation.headingMagnetic':
-            if (Number.isFinite(v.value)) { latest.headingMagnetic = v.value }
+            if (Number.isFinite(v.value)) { latest.headingMagnetic = { value: v.value, t: now } }
             break
           case 'environment.wind.directionTrue':
-            if (Number.isFinite(v.value)) { latest.windDir = v.value }
+            if (Number.isFinite(v.value)) { latest.windDir = { value: v.value, t: now } }
             break
         }
       }
@@ -172,7 +192,11 @@ module.exports = function (app) {
   }
 
   function trimBuffer () {
-    const cutoff = Date.now() - opts.windowSeconds * 1000
+    if (buffer.length === 0) { return }
+    // Trim relative to the newest sample's own timestamp, not the wall clock —
+    // delta timestamps can be offset from server time (clock skew, playback), and
+    // mixing the two would size the window wrong or let the buffer grow unbounded.
+    const cutoff = buffer[buffer.length - 1].t - opts.windowSeconds * 1000
     let i = 0
     while (i < buffer.length && buffer[i].t < cutoff) { i++ }
     if (i > 0) { buffer = buffer.slice(i) }
@@ -187,6 +211,8 @@ module.exports = function (app) {
       return
     }
 
+    const headingTrue = fresh(latest.headingTrue)
+    const headingMagnetic = fresh(latest.headingMagnetic)
     const ctx = {
       fsTarget: opts.fsTarget,
       minSamples: 64,
@@ -194,9 +220,9 @@ module.exports = function (app) {
       periodMax: opts.periodMax,
       boatLength: opts.boatLength,
       defaultRegime: opts.defaultRegime,
-      stw: latest.stw,
-      heading: latest.headingTrue != null ? latest.headingTrue : latest.headingMagnetic,
-      windDir: latest.windDir
+      stw: fresh(latest.stw),
+      heading: headingTrue != null ? headingTrue : headingMagnetic,
+      windDir: fresh(latest.windDir)
     }
 
     let r
@@ -229,6 +255,23 @@ module.exports = function (app) {
       return
     }
 
+    if (!r._solveOk) {
+      // The encounter solve failed or was ill-conditioned (fast following sea):
+      // the corrected period would be systematically wrong, not merely uncertain,
+      // so publish only the heartbeat and withhold the wave parameters.
+      emit([
+        { path: 'environment.wave.state', value: 'lowConfidence' },
+        { path: 'environment.wave.rmsSlope', value: r.rmsSlope },
+        { path: 'environment.wave.slopeGate', value: slopeGate },
+        { path: 'environment.wave.confidence', value: r.confidence }
+      ])
+      app.setPluginStatus(
+        `Encounter solve unreliable (fast following sea) — not publishing. ` +
+        `Te≈${r.encounterPeriod.toFixed(1)}s`
+      )
+      return
+    }
+
     if (r.confidence < opts.minConfidence) {
       emit([
         { path: 'environment.wave.state', value: 'lowConfidence' },
@@ -247,7 +290,8 @@ module.exports = function (app) {
     app.setPluginStatus(
       `T ${r.period.toFixed(1)}s · λ ${r.length.toFixed(0)}m · ` +
       `Hs≈${r.significantHeight != null ? r.significantHeight.toFixed(2) : '?'}m · ` +
-      `conf ${r.confidence.toFixed(2)} (${r._following ? 'following' : 'head'}, STW ${r._stw.toFixed(1)})`
+      `conf ${r.confidence.toFixed(2)} (${r._following ? 'following' : 'head'}, ` +
+      `STW ${r._stw != null ? r._stw.toFixed(1) : '?'})`
     )
   }
 

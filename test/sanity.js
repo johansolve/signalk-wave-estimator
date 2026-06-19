@@ -94,6 +94,10 @@ function check (name, cond, detail) {
   check('solve: head root < encounter', head.ok && head.omega < 1.0, `omega ${head.omega.toFixed(3)}`)
   const bad = solveTrueOmega(2.0, 5, 1) // following, boat outruns -> no real root
   check('solve: following no-root falls back', !bad.ok)
+  const nearMax = solveTrueOmega(0.78, 3, 1) // following, near encounter-freq max -> ill-conditioned
+  check('solve: following near-max flagged unreliable', !nearMax.ok)
+  const mildFollow = solveTrueOmega(0.3, 3, 1) // following, well below max -> solves
+  check('solve: mild following solves', mildFollow.ok && mildFollow.omega > 0, `omega ${mildFollow.omega.toFixed(3)}`)
 }
 
 console.log(failed === 0 ? '\nAll sanity checks passed.' : `\n${failed} check(s) FAILED.`)
