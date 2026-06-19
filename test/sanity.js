@@ -56,6 +56,9 @@ function check (name, cond, detail) {
   check('rest: wavelength', Math.abs(r.length - lambda) < 6, `got ${r.length.toFixed(1)}m want ${lambda.toFixed(1)}m`)
   check('rest: height present', r.significantHeight > 0, `Hs≈${r.significantHeight.toFixed(2)}m`)
   check('rest: confidence high', r.confidence > 0.4, `conf ${r.confidence.toFixed(2)}`)
+  // 5° amplitude sinusoid -> RMS slope = 5/sqrt(2) ≈ 3.54° (0.0617 rad).
+  const rmsDeg = r.rmsSlope * 180 / Math.PI
+  check('rest: rmsSlope matches amplitude', Math.abs(rmsDeg - 3.54) < 0.4, `got ${rmsDeg.toFixed(2)}° want ≈3.54°`)
 }
 
 // 2) Head seas, STW 3 m/s. Generate the SHIFTED encounter signal from a known

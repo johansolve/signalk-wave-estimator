@@ -79,6 +79,13 @@ module.exports = function (app) {
         default: 0.1,
         minimum: 0,
         maximum: 1
+      },
+      minSlopeDeg: {
+        type: 'number',
+        title: 'Minimum motion to report (° RMS slope)',
+        description: 'Amplitude gate: suppress estimates when the RMS pitch/roll slope is below this. At the dock the boat barely moves (~0.04° RMS), so a small floor rejects noise while any real sea (degrees of slope) passes. Set 0 to disable.',
+        default: 0.5,
+        minimum: 0
       }
     }
   })
@@ -93,7 +100,8 @@ module.exports = function (app) {
         periodMax: 20,
         boatLength: 8.4,
         defaultRegime: 'head',
-        minConfidence: 0.1
+        minConfidence: 0.1,
+        minSlopeDeg: 0.5
       },
       settings || {}
     )
@@ -200,6 +208,14 @@ module.exports = function (app) {
     }
     if (!r) {
       app.setPluginStatus(`Buffering… (${buffer.length} samples, need a longer/cleaner window)`)
+      return
+    }
+
+    const rmsSlopeDeg = r.rmsSlope * 180 / Math.PI
+    if (rmsSlopeDeg < opts.minSlopeDeg) {
+      app.setPluginStatus(
+        `Too calm — ${rmsSlopeDeg.toFixed(2)}° RMS slope < ${opts.minSlopeDeg}° gate. Not publishing.`
+      )
       return
     }
 

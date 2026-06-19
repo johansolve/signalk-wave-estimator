@@ -98,6 +98,7 @@ conventional namespace (`significantHeight`, `period`, `direction`).
 | Waterline length (m) | 8.4 | Elan 333 LWL; drives the confidence flag |
 | Default sea regime | head | head/following sign when wind is unknown |
 | Minimum confidence | 0.1 | suppress estimates below this |
+| Minimum motion (° RMS slope) | 0.5 | amplitude gate; suppress when the boat barely moves (dock ≈ 0.04° RMS). 0 disables |
 
 ## Install / deploy on board
 
