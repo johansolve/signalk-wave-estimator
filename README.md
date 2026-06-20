@@ -45,12 +45,24 @@ in the project HANDOFF notes.)
 | Condition | Height quality |
 |---|---|
 | Wavelength ≫ hull (λ ≳ 3·LWL), head/following seas, sharp spectral peak | usable proxy |
-| Wavelength ≈ hull, or confused/short chop | unreliable — confidence drops |
-| Beam seas (roll-dominated) | poor — roll resonance inflates the slope; confidence drops |
+| Wavelength ≈ hull, or confused/short chop | unreliable — height confidence drops |
+| Beam seas (roll-dominated) | genuine beam seas now pass (roll & pitch peak at the same frequency); only roll energy at a *different* (hull-resonant) frequency drops confidence |
 
-The published `environment.wave.confidence` (0–1) folds in wavelength-vs-hull,
-spectral sharpness, encounter-solve validity and roll dominance. Estimates below
-**Minimum confidence** are suppressed rather than published as noise.
+Confidence is split per output. `environment.wave.confidence` (0–1) is for
+**period and direction** and folds in spectral **narrowness**
+(`ν = √(m0·m2/m1² − 1)`), encounter-solve validity, a **roll-resonance**
+discriminator (roll energy at a frequency away from the pitch peak is treated as
+hull resonance, not beam-sea signal) and **temporal stability** across recent
+cycles. `environment.wave.heightConfidence` is for the **height** specifically:
+it is `confidence ×` the wavelength-vs-hull contouring gate, so it is always ≤ the
+general confidence (height is the weakest output). Estimates whose general
+confidence is below **Minimum confidence** are suppressed rather than published as
+noise; height is still published with its own (lower) confidence so consumers can
+trust period/direction even when the height proxy is shaky.
+
+When a second, well-separated spectral peak is present (e.g. swell under a wind
+sea) it is reported under `environment.wave.secondary.*` — the single-component
+fallback would otherwise smear the two systems together.
 
 ## Path to a measured height (future: heave sensor)
 
@@ -128,9 +140,16 @@ relative angles.
 | `celerity` | m/s | phase speed |
 | `groupSpeed` | m/s | group speed (c/2) |
 | `significantHeight` | m | **proxy** Hs from slope inversion |
+| `heightConfidence` | ratio | 0–1 confidence in the height proxy (≤ `confidence`) |
 | `directionTrue` | rad | direction waves come from (heading + relative) |
 | `directionRelative` | rad | signed off-bow angle waves come from (+ve starboard, −ve port) |
-| `confidence` | ratio | 0–1 estimate confidence |
+| `confidence` | ratio | 0–1 confidence in period/direction |
+| `secondary.present` | bool | a distinct second wave system was detected |
+| `secondary.period` | s | secondary wave period |
+| `secondary.length` | m | secondary wavelength |
+| `secondary.directionTrue` | rad | secondary direction (from) |
+| `secondary.directionRelative` | rad | secondary signed off-bow angle (from) |
+| `secondary.confidence` | ratio | secondary peak prominence vs the primary |
 
 `environment.wave.*` is not part of the formal Signal K spec but is the
 conventional namespace (`significantHeight`, `period`, `direction`).
@@ -175,6 +194,8 @@ the encounter-speed correction.
 - `directionRelative` port/starboard side now resolved from the pitch/roll
   cross-spectrum, but the sign mapping needs one-time sea-trial calibration via
   the **Flip port/starboard side** setting.
-- Narrowband height inversion biases broadband/confused seas.
+- Narrowband height inversion still biases broadband/confused seas; a distinct
+  **second** wave system is now detected and reported under
+  `environment.wave.secondary.*`, but three-plus systems are not.
 - Optional shallow-water dispersion correction (`environment.depth`) not yet
   implemented; deep-water approximation only.

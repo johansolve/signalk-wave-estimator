@@ -16,18 +16,31 @@
     'environment.wave.celerity',
     'environment.wave.groupSpeed',
     'environment.wave.significantHeight',
+    'environment.wave.heightConfidence',
     'environment.wave.directionTrue',
     'environment.wave.directionRelative',
     'environment.wave.confidence',
     'environment.wave.state',
     'environment.wave.rmsSlope',
-    'environment.wave.slopeGate'
+    'environment.wave.slopeGate',
+    'environment.wave.secondary.present',
+    'environment.wave.secondary.period',
+    'environment.wave.secondary.length',
+    'environment.wave.secondary.directionTrue',
+    'environment.wave.secondary.directionRelative',
+    'environment.wave.secondary.confidence'
   ]
 
   var el = {}
   ;['link', 'banner', 'bannerLabel', 'confValue', 'bannerNote', 'height', 'heightSub', 'period',
     'encPeriod', 'length', 'celerity', 'groupSpeed', 'dirTrue', 'dirRel',
-    'waveArrow', 'age', 'regime'].forEach(function (id) { el[id] = document.getElementById(id) })
+    'waveArrow', 'age', 'regime',
+    'secCard', 'secPeriod', 'secLength', 'secDir'].forEach(function (id) { el[id] = document.getElementById(id) })
+
+  function sideStr (dr) {
+    if (dr == null || !isFinite(dr)) { return '–' }
+    return Math.abs(Math.round(dr * RAD_TO_DEG)) + '° ' + (dr < 0 ? 'P' : 'S')
+  }
 
   var state = {}
   var lastUpdate = 0
@@ -57,16 +70,33 @@
     var dt = calm ? null : state['environment.wave.directionTrue']
     var dr = calm ? null : state['environment.wave.directionRelative']
     el.dirTrue.textContent = (dt == null || !isFinite(dt)) ? '–' : deg360(dt * RAD_TO_DEG)
-    el.dirRel.textContent = (dr == null || !isFinite(dr))
-      ? '–'
-      : Math.abs(Math.round(dr * RAD_TO_DEG)) + '° ' + (dr < 0 ? 'P' : 'S')
+    el.dirRel.textContent = sideStr(dr)
     if (dr != null && isFinite(dr)) {
       // Arrow points to where the waves come FROM, relative to the bow (up).
       el.waveArrow.setAttribute('transform', 'rotate(' + (dr * RAD_TO_DEG) + ' 60 60)')
     }
-    el.heightSub.textContent = calm ? 'too calm — below the motion gate' : 'slope inversion · no heave sensor'
 
+    var hc = calm ? null : state['environment.wave.heightConfidence']
+    if (calm) {
+      el.heightSub.textContent = 'too calm — below the motion gate'
+    } else if (hc == null) {
+      el.heightSub.textContent = 'slope inversion · no heave sensor'
+    } else {
+      el.heightSub.textContent = 'slope proxy · height conf ' + Math.round(hc * 100) + '%'
+    }
+
+    renderSecondary(calm)
     setBanner()
+  }
+
+  function renderSecondary (calm) {
+    var present = !calm && state['environment.wave.secondary.present'] === true
+    if (!el.secCard) { return }
+    el.secCard.hidden = !present
+    if (!present) { return }
+    el.secPeriod.textContent = fmt(state['environment.wave.secondary.period'], 1)
+    el.secLength.textContent = fmt(state['environment.wave.secondary.length'], 0)
+    el.secDir.textContent = sideStr(state['environment.wave.secondary.directionRelative'])
   }
 
   function setBanner () {
@@ -90,10 +120,11 @@
     } else if (st === 'lowConfidence') {
       cls = 'bad'
       value = (conf == null) ? '–' : Math.round(conf * 100) + '%'
-      note = 'Low — unreliable conditions (short / confused / beam / fast following sea). Waves not published.'
+      note = 'Low — unreliable conditions (confused / fast following sea). Waves not published.'
     } else if (conf != null) {
       value = Math.round(conf * 100) + '%'
-      if (conf >= 0.6) { cls = 'good'; note = 'Estimate is reliable.' } else if (conf >= 0.3) { cls = 'warn'; note = 'Marginal — treat height with care.' } else { cls = 'bad'; note = 'Low — height unreliable (short/confused/beam seas).' }
+      // This is period/direction confidence; height has its own value on the card.
+      if (conf >= 0.6) { cls = 'good'; note = 'Period & direction reliable.' } else if (conf >= 0.3) { cls = 'warn'; note = 'Marginal — period/direction uncertain.' } else { cls = 'bad'; note = 'Low — confused or short seas.' }
     }
 
     el.banner.className = 'banner ' + cls

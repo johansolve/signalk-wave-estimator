@@ -1,7 +1,7 @@
 {
   "name": "signalk-wave-estimator",
   "version": "0.1.0-alpha",
-  "description": "Estimate sea state from boat motion: derive true wave period, length, celerity and a slope-inversion height proxy from pitch/roll, corrected for speed through water. Publishes environment.wave.*. Alpha — height is a proxy, no heave sensor.",
+  "description": "Wave period, length, celerity and a height proxy from boat pitch/roll. Alpha — height is a proxy, no heave sensor.",
   "main": "index.js",
   "scripts": {
     "test": "node test/sanity.js"

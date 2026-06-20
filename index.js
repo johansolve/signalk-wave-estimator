@@ -9,9 +9,13 @@ module.exports = function (app) {
   // Each scalar input keeps its arrival time so compute() can ignore a source
   // that has gone silent instead of trusting a stale value forever.
   let latest = emptyLatest()
+  // Recent valid estimates [{ period, directionRelative }] for the temporal
+  // stability gate; an estimate that jitters between cycles is downweighted.
+  let history = []
   let opts = {}
 
   const STALE_MS = 20000
+  const HISTORY_MAX = 6
 
   function emptyLatest () {
     return {
@@ -131,6 +135,7 @@ module.exports = function (app) {
     )
     buffer = []
     latest = emptyLatest()
+    history = []
 
     subscribe()
     publishMeta()
@@ -230,7 +235,8 @@ module.exports = function (app) {
       stw: fresh(latest.stw),
       heading: headingTrue != null ? headingTrue : headingMagnetic,
       windDir: fresh(latest.windDir),
-      flipSide: opts.flipSide
+      flipSide: opts.flipSide,
+      history
     }
 
     let r
@@ -280,6 +286,11 @@ module.exports = function (app) {
       return
     }
 
+    // Valid solve: record it for the temporal-stability gate (whether or not it
+    // clears the confidence threshold) so jitter is detectable across cycles.
+    history.push({ period: r.period, directionRelative: r.directionRelative })
+    if (history.length > HISTORY_MAX) { history = history.slice(history.length - HISTORY_MAX) }
+
     if (r.confidence < opts.minConfidence) {
       emit([
         { path: 'environment.wave.state', value: 'lowConfidence' },
@@ -299,7 +310,8 @@ module.exports = function (app) {
       `T ${r.period.toFixed(1)}s · λ ${r.length.toFixed(0)}m · ` +
       `Hs≈${r.significantHeight != null ? r.significantHeight.toFixed(2) : '?'}m · ` +
       `conf ${r.confidence.toFixed(2)} (${r._following ? 'following' : 'head'}, ` +
-      `STW ${r._stw != null ? r._stw.toFixed(1) : '?'})`
+      `STW ${r._stw != null ? r._stw.toFixed(1) : '?'})` +
+      (r.secondary != null ? ` · 2nd T ${r.secondary.period.toFixed(1)}s` : '')
     )
   }
 
@@ -329,11 +341,25 @@ module.exports = function (app) {
     ]
     if (r.significantHeight != null) {
       values.push({ path: 'environment.wave.significantHeight', value: r.significantHeight })
+      values.push({ path: 'environment.wave.heightConfidence', value: r.heightConfidence })
     }
     if (r.directionTrue != null) {
       values.push({ path: 'environment.wave.directionTrue', value: r.directionTrue })
     }
     values.push({ path: 'environment.wave.directionRelative', value: r.directionRelative })
+
+    // Secondary wave system (bimodal sea), when a distinct second peak is found.
+    const s = r.secondary
+    values.push({ path: 'environment.wave.secondary.present', value: s != null })
+    if (s != null) {
+      values.push({ path: 'environment.wave.secondary.period', value: s.period })
+      values.push({ path: 'environment.wave.secondary.length', value: s.length })
+      values.push({ path: 'environment.wave.secondary.directionRelative', value: s.directionRelative })
+      if (s.directionTrue != null) {
+        values.push({ path: 'environment.wave.secondary.directionTrue', value: s.directionTrue })
+      }
+      values.push({ path: 'environment.wave.secondary.confidence', value: s.confidence })
+    }
 
     emit(values)
   }
@@ -345,10 +371,17 @@ module.exports = function (app) {
       { path: 'environment.wave.length', value: { units: 'm', displayName: 'Wavelength', shortName: 'λ' } },
       { path: 'environment.wave.celerity', value: { units: 'm/s', displayName: 'Wave celerity', shortName: 'c' } },
       { path: 'environment.wave.groupSpeed', value: { units: 'm/s', displayName: 'Wave group speed', shortName: 'cg' } },
-      { path: 'environment.wave.significantHeight', value: { units: 'm', displayName: 'Sig. wave height (proxy)', shortName: 'Hs~', description: 'Slope-inversion proxy from pitch/roll — no heave sensor; trust only with high confidence' } },
+      { path: 'environment.wave.significantHeight', value: { units: 'm', displayName: 'Sig. wave height (proxy)', shortName: 'Hs~', description: 'Slope-inversion proxy from pitch/roll — no heave sensor; trust only with high height confidence' } },
+      { path: 'environment.wave.heightConfidence', value: { units: 'ratio', displayName: 'Height confidence', shortName: 'confH', description: 'Confidence in the height proxy specifically; <= overall confidence, also folds in wavelength-vs-hull contouring validity' } },
       { path: 'environment.wave.directionTrue', value: { units: 'rad', displayName: 'Wave direction (from)', shortName: 'Dir' } },
       { path: 'environment.wave.directionRelative', value: { units: 'rad', displayName: 'Wave dir. rel. bow (from)', shortName: 'DirRel', description: 'Signed angle off the bow axis, +ve starboard / -ve port (side from pitch/roll cross-spectrum)' } },
-      { path: 'environment.wave.confidence', value: { units: 'ratio', displayName: 'Estimate confidence', shortName: 'conf' } },
+      { path: 'environment.wave.confidence', value: { units: 'ratio', displayName: 'Estimate confidence', shortName: 'conf', description: 'Confidence in period/direction (spectral narrowness, encounter-solve, roll-resonance and temporal stability)' } },
+      { path: 'environment.wave.secondary.present', value: { displayName: 'Secondary wave present', description: 'Whether a distinct second wave system (e.g. swell under a wind sea) was detected' } },
+      { path: 'environment.wave.secondary.period', value: { units: 's', displayName: 'Secondary wave period', shortName: 'Tw2' } },
+      { path: 'environment.wave.secondary.length', value: { units: 'm', displayName: 'Secondary wavelength', shortName: 'λ2' } },
+      { path: 'environment.wave.secondary.directionTrue', value: { units: 'rad', displayName: 'Secondary direction (from)', shortName: 'Dir2' } },
+      { path: 'environment.wave.secondary.directionRelative', value: { units: 'rad', displayName: 'Secondary dir. rel. bow (from)', shortName: 'DirRel2', description: 'Signed angle off the bow axis, +ve starboard / -ve port' } },
+      { path: 'environment.wave.secondary.confidence', value: { units: 'ratio', displayName: 'Secondary confidence', shortName: 'conf2', description: 'Prominence of the secondary peak relative to the primary' } },
       { path: 'environment.wave.state', value: { displayName: 'Estimator state', description: 'ok | calm (below the motion gate) | lowConfidence' } },
       { path: 'environment.wave.rmsSlope', value: { units: 'rad', displayName: 'RMS pitch/roll slope', shortName: 'slope', description: 'Raw wave-band motion energy; the amplitude gate acts on this' } },
       { path: 'environment.wave.slopeGate', value: { units: 'rad', displayName: 'Motion gate threshold', shortName: 'gate' } }
