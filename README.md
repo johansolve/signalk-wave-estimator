@@ -6,6 +6,8 @@ Derive sea state from boat motion. The plugin watches `navigation.attitude`
 using the deep-water encounter relation, and publishes true wave period,
 wavelength, celerity and a **height proxy** under `environment.wave.*`.
 
+![Wave estimator webapp](docs/webapp.png)
+
 > **Alpha — not yet sea-trialled.** All verification so far is synthetic (the
 > `npm test` sanity check) plus dockside running; the estimator has **not** been
 > validated against real waves or a known sea state, and the height proxy is
