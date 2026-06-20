@@ -107,9 +107,16 @@ confident-looking but arbitrary value.
 The encounter angle magnitude off the bow is estimated from the slope-energy
 ratio `tan α = √(m0_roll / m0_pitch)`. Amplitude alone cannot resolve
 head-vs-following or port-vs-starboard; wind direction (if available) picks the
-head/following sign, otherwise the configured default regime is used. The
-port/starboard side of `directionRelative` is left unresolved (would need the
-roll/pitch phase relationship).
+head/following sign, otherwise the configured default regime is used.
+
+The **port/starboard side** comes from the **pitch/roll cross-spectrum** at the
+dominant bin. For a single wave pitch and roll oscillate co-linearly in time, so
+the cross-spectrum is real at the peak and its sign tracks the side the wave
+comes from (`Re(S_pr) ∝ sin 2β`). Which sign means starboard depends on the IMU
+mounting and the attitude sign convention, so it is calibrated once at sea trial
+via the **Flip port/starboard side** setting. `directionRelative` is then a
+signed angle in `[−π, π]` (+ve starboard, −ve port), as for other Signal K
+relative angles.
 
 ## Published paths (`environment.wave.*`, SI units)
 
@@ -122,7 +129,7 @@ roll/pitch phase relationship).
 | `groupSpeed` | m/s | group speed (c/2) |
 | `significantHeight` | m | **proxy** Hs from slope inversion |
 | `directionTrue` | rad | direction waves come from (heading + relative) |
-| `directionRelative` | rad | off-bow magnitude waves come from (side unresolved) |
+| `directionRelative` | rad | signed off-bow angle waves come from (+ve starboard, −ve port) |
 | `confidence` | ratio | 0–1 estimate confidence |
 
 `environment.wave.*` is not part of the formal Signal K spec but is the
@@ -140,6 +147,7 @@ conventional namespace (`significantHeight`, `period`, `direction`).
 | Default sea regime | head | head/following sign when wind is unknown |
 | Minimum confidence | 0.1 | suppress estimates below this |
 | Minimum motion (° RMS slope) | 0.5 | amplitude gate; suppress when the boat barely moves (dock ≈ 0.04° RMS). 0 disables |
+| Flip port/starboard side | off | invert the cross-spectrum side mapping if the reported side is mirrored at sea trial |
 
 ## Install / deploy on board
 
@@ -164,7 +172,9 @@ the encounter-speed correction.
   height* for what a real one would take.
 - Following-seas root ambiguity / ill-conditioning near the encounter-frequency
   maximum is handled by withholding the estimate, not by full resolution.
-- `directionRelative` port/starboard side unresolved (needs roll/pitch phase).
+- `directionRelative` port/starboard side now resolved from the pitch/roll
+  cross-spectrum, but the sign mapping needs one-time sea-trial calibration via
+  the **Flip port/starboard side** setting.
 - Narrowband height inversion biases broadband/confused seas.
 - Optional shallow-water dispersion correction (`environment.depth`) not yet
   implemented; deep-water approximation only.

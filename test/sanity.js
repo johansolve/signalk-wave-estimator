@@ -7,7 +7,10 @@
 const assert = require('assert')
 const { analyze, solveTrueOmega, G } = require('../lib/wave-estimator')
 
-function buildSamples ({ omegaE, slopeAmp, rollAmp = 0, windowSec = 120, rateHz = 11.5 }) {
+// rollPhase (rad) sets the pitch->roll phase: 0 = in phase (resolves to one
+// side), Math.PI = anti-phase (the other side), Math.PI/2 = quadrature (the
+// degenerate beam case where the side is genuinely ambiguous).
+function buildSamples ({ omegaE, slopeAmp, rollAmp = 0, rollPhase = 0, windowSec = 120, rateHz = 11.5 }) {
   const samples = []
   const dt = 1000 / rateHz
   const n = Math.floor(windowSec * rateHz)
@@ -17,7 +20,7 @@ function buildSamples ({ omegaE, slopeAmp, rollAmp = 0, windowSec = 120, rateHz 
     const jitter = ((i * 2654435761) % 1000) / 1000 - 0.5 // deterministic pseudo-jitter
     const t = t0 + i * dt + jitter * dt * 0.3
     const ph = omegaE * (t - t0) / 1000
-    samples.push({ t, pitch: slopeAmp * Math.cos(ph), roll: rollAmp * Math.sin(ph) })
+    samples.push({ t, pitch: slopeAmp * Math.cos(ph), roll: rollAmp * Math.cos(ph + rollPhase) })
   }
   return samples
 }
@@ -83,8 +86,31 @@ function check (name, cond, detail) {
   const samples = buildSamples({ omegaE, slopeAmp: 1 * Math.PI / 180, rollAmp: 6 * Math.PI / 180 })
   const r = analyze(samples, Object.assign({}, baseCtx, { stw: 0 }))
   assert(r, 'expected a result in beam seas')
-  check('beam: directionRelative near 90°', Math.abs(r.directionRelative - Math.PI / 2) < 0.5,
+  // In-phase roll resolves to starboard; the magnitude is what this case tests.
+  check('beam: |directionRelative| near 90°', Math.abs(Math.abs(r.directionRelative) - Math.PI / 2) < 0.5,
     `got ${(r.directionRelative * 180 / Math.PI).toFixed(0)}°`)
+}
+
+// 3b) Port vs starboard from the pitch/roll phase. In-phase roll -> one side,
+//     anti-phase -> the other; flipSide inverts the mapping.
+{
+  const T0 = 7
+  const omegaE = 2 * Math.PI / T0
+  const amp = 4 * Math.PI / 180
+  const stbd = analyze(buildSamples({ omegaE, slopeAmp: amp, rollAmp: amp, rollPhase: 0 }),
+    Object.assign({}, baseCtx, { stw: 0 }))
+  const port = analyze(buildSamples({ omegaE, slopeAmp: amp, rollAmp: amp, rollPhase: Math.PI }),
+    Object.assign({}, baseCtx, { stw: 0 }))
+  check('starboard: directionRelative > 0', stbd.directionRelative > 0,
+    `got ${(stbd.directionRelative * 180 / Math.PI).toFixed(0)}°`)
+  check('port: directionRelative < 0', port.directionRelative < 0,
+    `got ${(port.directionRelative * 180 / Math.PI).toFixed(0)}°`)
+  check('starboard and port are opposite signs',
+    Math.sign(stbd.directionRelative) === -Math.sign(port.directionRelative))
+  const flipped = analyze(buildSamples({ omegaE, slopeAmp: amp, rollAmp: amp, rollPhase: 0 }),
+    Object.assign({}, baseCtx, { stw: 0, flipSide: true }))
+  check('flipSide inverts the side', flipped.directionRelative < 0,
+    `got ${(flipped.directionRelative * 180 / Math.PI).toFixed(0)}°`)
 }
 
 // 4) solveTrueOmega unit behaviour.

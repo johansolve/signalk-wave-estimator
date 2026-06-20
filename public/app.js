@@ -57,7 +57,9 @@
     var dt = calm ? null : state['environment.wave.directionTrue']
     var dr = calm ? null : state['environment.wave.directionRelative']
     el.dirTrue.textContent = (dt == null || !isFinite(dt)) ? '–' : deg360(dt * RAD_TO_DEG)
-    el.dirRel.textContent = (dr == null || !isFinite(dr)) ? '–' : Math.round(dr * RAD_TO_DEG)
+    el.dirRel.textContent = (dr == null || !isFinite(dr))
+      ? '–'
+      : Math.abs(Math.round(dr * RAD_TO_DEG)) + '° ' + (dr < 0 ? 'P' : 'S')
     if (dr != null && isFinite(dr)) {
       // Arrow points to where the waves come FROM, relative to the bow (up).
       el.waveArrow.setAttribute('transform', 'rotate(' + (dr * RAD_TO_DEG) + ' 60 60)')

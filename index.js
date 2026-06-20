@@ -103,6 +103,12 @@ module.exports = function (app) {
         description: 'Amplitude gate: suppress estimates when the RMS pitch/roll slope is below this. At the dock the boat barely moves (~0.04° RMS), so a small floor rejects noise while any real sea (degrees of slope) passes. Set 0 to disable.',
         default: 0.5,
         minimum: 0
+      },
+      flipSide: {
+        type: 'boolean',
+        title: 'Flip port/starboard side',
+        description: 'Port/starboard of the wave direction comes from the pitch/roll cross-spectrum sign, which depends on the IMU mounting and attitude convention. If the reported side is mirrored at sea trial, enable this to invert it.',
+        default: false
       }
     }
   })
@@ -118,7 +124,8 @@ module.exports = function (app) {
         boatLength: 8.4,
         defaultRegime: 'head',
         minConfidence: 0.1,
-        minSlopeDeg: 0.5
+        minSlopeDeg: 0.5,
+        flipSide: false
       },
       settings || {}
     )
@@ -222,7 +229,8 @@ module.exports = function (app) {
       defaultRegime: opts.defaultRegime,
       stw: fresh(latest.stw),
       heading: headingTrue != null ? headingTrue : headingMagnetic,
-      windDir: fresh(latest.windDir)
+      windDir: fresh(latest.windDir),
+      flipSide: opts.flipSide
     }
 
     let r
@@ -339,7 +347,7 @@ module.exports = function (app) {
       { path: 'environment.wave.groupSpeed', value: { units: 'm/s', displayName: 'Wave group speed', shortName: 'cg' } },
       { path: 'environment.wave.significantHeight', value: { units: 'm', displayName: 'Sig. wave height (proxy)', shortName: 'Hs~', description: 'Slope-inversion proxy from pitch/roll — no heave sensor; trust only with high confidence' } },
       { path: 'environment.wave.directionTrue', value: { units: 'rad', displayName: 'Wave direction (from)', shortName: 'Dir' } },
-      { path: 'environment.wave.directionRelative', value: { units: 'rad', displayName: 'Wave dir. rel. bow (from)', shortName: 'DirRel', description: 'Magnitude off the bow axis; port/starboard side is unresolved' } },
+      { path: 'environment.wave.directionRelative', value: { units: 'rad', displayName: 'Wave dir. rel. bow (from)', shortName: 'DirRel', description: 'Signed angle off the bow axis, +ve starboard / -ve port (side from pitch/roll cross-spectrum)' } },
       { path: 'environment.wave.confidence', value: { units: 'ratio', displayName: 'Estimate confidence', shortName: 'conf' } },
       { path: 'environment.wave.state', value: { displayName: 'Estimator state', description: 'ok | calm (below the motion gate) | lowConfidence' } },
       { path: 'environment.wave.rmsSlope', value: { units: 'rad', displayName: 'RMS pitch/roll slope', shortName: 'slope', description: 'Raw wave-band motion energy; the amplitude gate acts on this' } },
