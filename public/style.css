@@ -50,18 +50,22 @@ body {
 .link.down { color: var(--bad); }
 
 .close {
+  position: fixed;
+  top: 12px;
+  right: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  margin: -6px -6px -6px 0;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   color: var(--muted);
   text-decoration: none;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   -webkit-tap-highlight-color: transparent;
 }
-.close:hover, .close:active { color: var(--text); background: rgba(255,255,255,0.08); }
+.close:hover, .close:active { color: var(--text); background: rgba(255,255,255,0.10); }
 .close svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; fill: none; }
 
 .banner {
