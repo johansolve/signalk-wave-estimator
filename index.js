@@ -75,8 +75,8 @@ module.exports = function (app) {
       periodMax: {
         type: 'number',
         title: 'Longest wave period considered (s)',
-        description: 'Upper bound of the analysis band.',
-        default: 20,
+        description: 'Upper bound of the analysis band. Keep it tight: a sailboat under way has broadband low-frequency roll/heel motion (slow rolling, heeling, course changes) that is NOT wave slope, and a loose upper bound lets the spectral peak land on it — inflating period, wavelength and (∝ period²) the height proxy. The 2026-06-21 sea trial showed this contamination down to ~5 s on Libelle; 6 s captures coastal wind sea while excluding it. Raise it for genuine ocean swell, accepting some low-frequency contamination.',
+        default: 6,
         minimum: 5
       },
       boatLength: {
@@ -124,7 +124,7 @@ module.exports = function (app) {
         updateSeconds: 5,
         fsTarget: 4,
         periodMin: 2,
-        periodMax: 20,
+        periodMax: 6,
         boatLength: 8.4,
         defaultRegime: 'head',
         minConfidence: 0.1,

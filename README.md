@@ -8,13 +8,43 @@ wavelength, celerity and a **height proxy** under `environment.wave.*`.
 
 ![Wave estimator webapp](docs/webapp.png)
 
-> **Alpha — not yet sea-trialled.** All verification so far is synthetic (the
-> `npm test` sanity check) plus dockside running; the estimator has **not** been
-> validated against real waves or a known sea state, and the height proxy is
-> **uncalibrated**. Period / wavelength / celerity are well-posed. Wave **height
-> is a proxy**, not a measurement — there is no heave/vertical-acceleration
-> sensor on the bus, so height is inferred from wave *slope* and carries a
-> confidence value. Trust it only when confidence is high. See *Height* below.
+> **Alpha — first sea trial 2026-06-21 (Libelle, Elan 333).** Direction is
+> validated; period/wavelength/height needed the fix described in *Sea trial*
+> below and have **not** yet been re-validated on the water. Wave **height is a
+> proxy**, not a measurement — there is no heave/vertical-acceleration sensor on
+> the bus, so height is inferred from wave *slope* and carries a confidence value.
+> For short coastal wind sea (wavelength barely above the hull) the height proxy
+> is only indicative; the webapp shows it as `~x.x`. See *Sea trial* and *Height*
+> below.
+
+## Sea trial — 2026-06-21 (Libelle)
+
+First on-water run, ~2.5 h, recorded at the native 10 Hz attitude rate and
+replayed offline against the live code. Sea was a coastal wind sea, waves from
+**~270° true**, ≤ ~0.7 m, wind ~300°.
+
+- **Direction works.** With waves from a known 270°, the published
+  `directionTrue` clustered at a circular mean of **282°** (62 % within ±45°);
+  flipping the port/starboard side destroyed that clustering (33 %, R 0.63→0.13).
+  Side agreement on beam-ish legs was **77 %**, head/following regime **79 %**.
+  `flipSide = false` is therefore **confirmed correct** — no change.
+- **Height (and wavelength) were grossly over-read** — median ~1.6 m, peaks > 10 m
+  against a real ≤ 0.7 m sea. Root cause: not the height formula (measured RMS
+  slope ~2.2° is consistent with ≤ 0.7 m) but an **over-estimated period**.
+  Since `Hs ∝ T²` and `λ ∝ T²`, a ~2× period error inflates both ~4×.
+- **Why the period was too long:** a sailboat under way has broadband
+  *low-frequency* roll/heel motion (slow rolling, heeling, course changes) that
+  is **not** wave slope. With the old `periodMax = 20 s` the spectral peak landed
+  on it (often 6–18 s, even 30 s when nearly stationary). This is **not** a sharp
+  notchable roll resonance — the contaminating roll energy is broadband from
+  ~5 s out to the band edge — and it cannot be separated from a genuine beam sea
+  in a single window (an amplitude, phase or frequency mask also kills real beam
+  seas). The robust fix is to **keep the band tight**.
+- **Fix applied:** `periodMax` default **20 → 6 s** (captures coastal wind sea,
+  excludes the low-frequency contamination). On the trial recording this pulls
+  published height to median 0.3 m / p90 ~1 m / max ~1.7 m, and wavelength from a
+  52 m median to ~22 m. The webapp now renders height as an explicit `~x.x`
+  proxy, muted when its confidence is low. Re-validation on the water is pending.
 
 ## Why height is only a proxy
 
@@ -161,7 +191,7 @@ conventional namespace (`significantHeight`, `period`, `direction`).
 | Analysis window (s) | 90 | FFT buffer length; longer = finer low-frequency resolution |
 | Update interval (s) | 5 | how often an estimate is computed |
 | Resample rate (Hz) | 4 | attitude is resampled to a uniform grid before the FFT |
-| Shortest / longest period (s) | 2 / 20 | analysis band |
+| Shortest / longest period (s) | 2 / 6 | analysis band. The 6 s upper bound keeps the peak off broadband low-frequency roll/heel motion (see *Sea trial*); raise it for genuine ocean swell |
 | Waterline length (m) | 8.4 | Elan 333 LWL; drives the confidence flag |
 | Default sea regime | head | head/following sign when wind is unknown |
 | Minimum confidence | 0.1 | suppress estimates below this |
@@ -184,16 +214,22 @@ the encounter-speed correction.
 
 ## Known limitations / TODO
 
-- **Not yet sea-trialled.** No on-water validation against a known sea state;
-  the height proxy is uncalibrated. This is the next step — calibrate against a
-  sea-trial visual reference.
-- Height is a slope-inversion proxy (no heave sensor) — see *Path to a measured
-  height* for what a real one would take.
+- **One sea trial so far (2026-06-21); height not yet re-validated.** Direction
+  is confirmed; the `periodMax` fix that brings height/wavelength into range is
+  validated only on that recording, not yet re-run on the water. The height proxy
+  remains uncalibrated against a measured reference.
+- **Height is unreliable for short coastal wind sea** (wavelength barely above
+  the hull) — the regime of the trial. It is a slope-inversion proxy with no
+  heave sensor; see *Path to a measured height* for what a real one would take.
+- **Broadband low-frequency roll contamination** (a sailboat's slow rolling/
+  heeling under way) is rejected only by the tight `periodMax`, not separated
+  signal-wise — it cannot be distinguished from a genuine beam sea in a single
+  window. A cross-window persistence tracker for the hull's own motion is the
+  next refinement (noted in the research doc).
 - Following-seas root ambiguity / ill-conditioning near the encounter-frequency
   maximum is handled by withholding the estimate, not by full resolution.
-- `directionRelative` port/starboard side now resolved from the pitch/roll
-  cross-spectrum, but the sign mapping needs one-time sea-trial calibration via
-  the **Flip port/starboard side** setting.
+- `directionRelative` port/starboard side is resolved from the pitch/roll
+  cross-spectrum; the trial confirmed the default mapping (`flipSide = false`).
 - Narrowband height inversion still biases broadband/confused seas; a distinct
   **second** wave system is now detected and reported under
   `environment.wave.secondary.*`, but three-plus systems are not.

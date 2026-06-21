@@ -8,6 +8,10 @@
   var MS_TO_KN = 1.94384
   var RAD_TO_DEG = 180 / Math.PI
   var STALE_MS = 20000
+  // Below this height confidence the slope proxy is not trustworthy (short waves
+  // barely above the hull, confused/contaminated spectrum). Show the number
+  // de-emphasised and tagged so it never reads as a measurement.
+  var HEIGHT_CONF_MIN = 0.33
 
   var PATHS = [
     'environment.wave.period',
@@ -57,7 +61,14 @@
     // Wave parameters are only meaningful when not gated; blank them when calm.
     var calm = state['environment.wave.state'] === 'calm'
 
-    el.height.textContent = fmt(calm ? null : state['environment.wave.significantHeight'], 2)
+    var hgt = calm ? null : state['environment.wave.significantHeight']
+    var hgtConf = calm ? null : state['environment.wave.heightConfidence']
+    var hgtLow = hgt != null && isFinite(hgt) && hgtConf != null && hgtConf < HEIGHT_CONF_MIN
+    // Height is a slope proxy with no heave sensor — never a measurement. Always
+    // prefix '~' and use one decimal so it never reads as a confident figure; mute
+    // it further when its own confidence is low.
+    el.height.textContent = (hgt == null || !isFinite(hgt)) ? '–' : '~' + hgt.toFixed(1)
+    el.height.classList.toggle('lowconf', hgtLow)
     el.period.textContent = fmt(calm ? null : state['environment.wave.period'], 1)
     el.encPeriod.textContent = fmt(calm ? null : state['environment.wave.encounterPeriod'], 1)
     el.length.textContent = fmt(calm ? null : state['environment.wave.length'], 0)
@@ -76,11 +87,13 @@
       el.waveArrow.setAttribute('transform', 'rotate(' + (dr * RAD_TO_DEG) + ' 60 60)')
     }
 
-    var hc = calm ? null : state['environment.wave.heightConfidence']
+    var hc = hgtConf
     if (calm) {
       el.heightSub.textContent = 'too calm — below the motion gate'
     } else if (hc == null) {
       el.heightSub.textContent = 'slope inversion · no heave sensor'
+    } else if (hc < HEIGHT_CONF_MIN) {
+      el.heightSub.textContent = 'indicative only · low conf ' + Math.round(hc * 100) + '% — short/confused sea'
     } else {
       el.heightSub.textContent = 'slope proxy · height conf ' + Math.round(hc * 100) + '%'
     }

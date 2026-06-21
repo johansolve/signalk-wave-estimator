@@ -3,3 +3,8 @@ package-lock.json
 *.log
 .DS_Store
 CLAUDE.md
+
+# sea-trial analysis: scratch scripts, recordings and rendered figures (local only)
+tools/
+trial-data/
+.venv/
